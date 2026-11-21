@@ -1,0 +1,66 @@
+name: Pilates Elif — freie Plätze
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        description: Nur prüfen, keine Pushs senden
+        default: true
+  # GitHub Actions cron ist UTC, nicht Europe/Berlin.
+  schedule:
+    - cron: '0 17 * * *' # 19:00 MESZ
+    - cron: '0 18 * * *' # 19:00 MEZ
+
+permissions:
+  contents: write
+
+concurrency:
+  group: elif-pilates-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Sommer-/Winterzeit beachten
+        id: time
+        env:
+          CRON_EXPRESSION: ${{ github.event.schedule }}
+        run: |
+          OFFSET=$(TZ=Europe/Berlin date +%z)
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          elif [[ "$CRON_EXPRESSION" == '0 17 * * *' && "$OFFSET" == '+0200' ]]; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          elif [[ "$CRON_EXPRESSION" == '0 18 * * *' && "$OFFSET" == '+0100' ]]; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          fi
+      - run: pip install -r requirements.txt
+        if: steps.time.outputs.run == 'true'
+      - run: python -m playwright install --with-deps chromium
+        if: steps.time.outputs.run == 'true'
+      - name: Eversports prüfen und optional ntfy senden
+        if: steps.time.outputs.run == 'true'
+        env:
+          NTFY_TOPIC: pilates-elif-k7m29q84x
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: python monitor.py
+      - name: Duplikatstatus speichern
+        if: steps.time.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || inputs.dry_run == false)
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/notified.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Update notified course sessions'
+            git push
+          fi
