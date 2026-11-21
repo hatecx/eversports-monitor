@@ -46,6 +46,9 @@ jobs:
           fi
       - run: pip install -r requirements.txt
         if: steps.time.outputs.run == 'true'
+      - name: Kursfilter testen
+        if: steps.time.outputs.run == 'true'
+        run: python -m unittest -v test_monitor.py
       - run: python -m playwright install --with-deps chromium
         if: steps.time.outputs.run == 'true'
       - name: Eversports prüfen und optional ntfy senden
