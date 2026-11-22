@@ -51,7 +51,14 @@ def read_week(page):
 def collect(browser, start, end):
     page = browser.new_page(locale="en-US")
     page.goto(CALENDAR, wait_until="domcontentloaded", timeout=45000)
-    page.get_by_role("heading", name="Studio Balance by Elif - Classes").wait_for(timeout=20000)
+    # Do not rely on a localized page heading. Check actual calendar slots.
+    try:
+        page.locator("li.calendar__slot[data-uuid]").first.wait_for(timeout=20000)
+    except Exception as exc:
+        title = page.title()
+        snippet = page.locator("body").inner_text(timeout=5000)[:900].replace("\\n", " ")
+        print(f"CALENDAR DIAGNOSTIC: url={page.url!r}; title={title!r}; body={snippet!r}", file=sys.stderr)
+        raise RuntimeError("No calendar sessions loaded; inspect diagnostic output above") from exc
     weeks = []
     current = datetime.now(ZONE).date()
     week_start = current - timedelta(days=current.weekday())
