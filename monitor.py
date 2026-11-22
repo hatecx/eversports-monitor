@@ -57,19 +57,20 @@ def collect(browser, start, end):
     week_start = current - timedelta(days=current.weekday())
     limit = 8
     for index in range(limit):
-        # Only use displayed, loaded weeks. The heading changes asynchronously after clicking.
-        week_label = page.locator(".event-session-calendar").inner_text(timeout=15000)
+        # Wait until the displayed calendar contains the expected week's dated sessions.
         expected = week_start + timedelta(days=7 * index)
-        expected_label = expected.strftime("%d %b")
-        if expected_label not in week_label[:150]:
-            # Show an actionable failure instead of treating incomplete pages as empty results.
-            raise RuntimeError(f"Calendar week not loaded: expected {expected_label}; got {week_label[:120]!r}")
+        expected_end = expected + timedelta(days=6)
+        page.wait_for_function("""([start, end]) => {
+          const slots = [...document.querySelectorAll('li.calendar__slot[data-uuid]')];
+          const dates = slots.map(e => e.querySelector('.sr-only')?.textContent || '')
+            .map(s => s.match(/(\\d{2})\\/(\\d{2})\\/(\\d{4})/))
+            .filter(Boolean).map(m => m[3] + '-' + m[2] + '-' + m[1]);
+          return dates.length > 0 && dates.every(d => d >= start && d <= end);
+        }""", arg=[expected.isoformat(), expected_end.isoformat()], timeout=20000)
         weeks.extend(read_week(page))
-        if expected + timedelta(days=6) >= end:
+        if expected_end >= end:
             break
-        next_label = (expected + timedelta(days=7)).strftime("%d %b")
         page.get_by_role("button", name="Go to Next Week").click()
-        page.get_by_text(re.compile(re.escape(next_label))).first.wait_for(timeout=20000)
     else:
         raise RuntimeError("Calendar did not cover the full 21-day window")
     return page, list({c["uuid"]: c for c in weeks}.values())
