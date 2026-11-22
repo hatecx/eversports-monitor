@@ -51,14 +51,14 @@ jobs:
         run: python -m unittest -v test_monitor.py
       - run: python -m playwright install --with-deps chromium
         if: steps.time.outputs.run == 'true'
-      - name: Eversports prüfen und optional ntfy senden
+      - name: Eversports im sicheren Prüfmodus prüfen
         if: steps.time.outputs.run == 'true'
         env:
           NTFY_TOPIC: pilates-elif-k7m29q84x
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+          DRY_RUN: 'true'
         run: python monitor.py
       - name: Duplikatstatus speichern
-        if: steps.time.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || inputs.dry_run == false)
+        if: ${{ false }} # Gesperrt bis erfolgreicher End-to-End-Test
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
